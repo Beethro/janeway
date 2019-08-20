@@ -2146,6 +2146,14 @@ class ArticleAuthorOrder(models.Model):
     class Meta:
         ordering = ('order',)
 
+class TransArticleAuthorOrder(models.Model):
+    article = models.ForeignKey(TransArticle)
+    author = models.ForeignKey('core.Account')
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ('order',)
+
 
 class SubmissionConfiguration(models.Model):
     journal = models.OneToOneField('journal.Journal')
