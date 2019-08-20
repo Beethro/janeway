@@ -1,3 +1,5 @@
+from django.db.models import Prefetch
+
 from django.forms import CharField, ModelForm, DateInput
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import get_language
@@ -59,36 +61,45 @@ class KeywordModelForm(ModelForm):
             instance.save()
         return instance
 
-# Use TranslatableModelForm enforce?
 class TranslatableKeywordModelForm(TranslatableModelForm):
-    language = None
-
     """ A ModelForm for models implementing a Keyword M2M relationship """
-    keywords = CharField(
-            required=False, help_text=_("Hit Enter to add a new keyword."))
+    #keywords = CharField(
+    #        required=False, help_text=_("Hit Enter to add a new keyword."))
 
     def __init__(self, *args, **kwargs):
         self.language = kwargs.pop('language', get_language())
+        self.keywords = kwargs.pop('keywords', None)
         super().__init__(*args, **kwargs)
 
-        print(self.language)
-        current_keywords = submission_models.TransKeyword.objects.language(self.language).values_list("word", flat=True)
-        field = CharField(label='keywords')
-        field.initial = ",".join(current_keywords)
+        self.fields['keywords'] = CharField(
+            required=False, help_text=_("Hit Enter to add a new keyword."))
+        
+        if self.keywords:
+            self.fields['keywords'].initial = ",".join(self.keywords)
 
     def save(self, commit=True, *args, **kwargs):
         instance = super().save(commit=commit, *args, **kwargs)
 
+        print(self.language)
+
         posted_keywords = self.cleaned_data.get('keywords', '').split(',')
+
         for keyword in posted_keywords:
             if keyword != '':
-                obj, _ = submission_models.TransKeyword.objects.language(self.language).get_or_create(
-                        word=keyword)
+                obj, _ = submission_models.TransKeyword.objects.language(self.language).fallbacks('en').filter(word=keyword).get_or_create(word=keyword)
+                                
+                if not self.language in obj.get_available_languages():
+                    obj.translate(self.language)
+                obj.articles.add(instance)
+                obj.save()
+
                 instance.keywords.add(obj)
 
-        for keyword in instance.keywords.all():
+        for keyword in submission_models.TransKeyword.objects.language(self.language).fallbacks('en').filter(articles__id=instance.id):
             if keyword.word not in posted_keywords:
                 instance.keywords.remove(keyword)
+                keyword.articles.remove(instance)
+                keyword.save()
 
         if commit:
             instance.save()

@@ -303,9 +303,9 @@ class TransKeywordManager(TranslationManager):
 
 class TransKeyword(TranslatableModel):
 
-    translations = TranslatedFields(
-        word = models.CharField(max_length=200)
-    )
+    translations = TranslatedFields(word = models.CharField(max_length=200))
+
+    articles = models.ManyToManyField('TransArticle', blank=True, null=True)
 
     objects = TransKeywordManager()
 
@@ -370,7 +370,7 @@ class TransArticle(TranslatableModel):
         non_specialist_summary = models.TextField(blank=True, null=True, help_text='A summary of the article for'
                                                                        ' non specialists.')
     )
-    keywords = models.ManyToManyField(Keyword, blank=True, null=True)
+    keywords = models.ManyToManyField(TransKeyword, related_name='keywords', blank=True, null=True)
     language = models.CharField(max_length=200, blank=True, null=True, choices=LANGUAGE_CHOICES,
                                 help_text=_('The primary language of the article'))
 
