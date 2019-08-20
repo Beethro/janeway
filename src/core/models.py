@@ -1114,6 +1114,15 @@ class WorkflowElement(models.Model):
         return self.element_name
 
 
+class TransWorkflowLog(models.Model):
+    article = models.ForeignKey('submission.TransArticle')
+    element = models.ForeignKey(WorkflowElement)
+    timestamp = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ('timestamp',)
+
+
 class WorkflowLog(models.Model):
     article = models.ForeignKey('submission.Article')
     element = models.ForeignKey(WorkflowElement)

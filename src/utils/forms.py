@@ -1,5 +1,7 @@
 from django.forms import CharField, ModelForm, DateInput
 from django.utils.translation import gettext_lazy as _
+from django.utils.translation import get_language
+from hvad.forms import TranslatableModelForm
 
 from submission import models as submission_models
 
@@ -46,6 +48,41 @@ class KeywordModelForm(ModelForm):
         for keyword in posted_keywords:
             if keyword != '':
                 obj, _ = submission_models.Keyword.objects.get_or_create(
+                        word=keyword)
+                instance.keywords.add(obj)
+
+        for keyword in instance.keywords.all():
+            if keyword.word not in posted_keywords:
+                instance.keywords.remove(keyword)
+
+        if commit:
+            instance.save()
+        return instance
+
+# Use TranslatableModelForm enforce?
+class TranslatableKeywordModelForm(TranslatableModelForm):
+    language = None
+
+    """ A ModelForm for models implementing a Keyword M2M relationship """
+    keywords = CharField(
+            required=False, help_text=_("Hit Enter to add a new keyword."))
+
+    def __init__(self, *args, **kwargs):
+        self.language = kwargs.pop('language', get_language())
+        super().__init__(*args, **kwargs)
+
+        print(self.language)
+        current_keywords = submission_models.TransKeyword.objects.language(self.language).values_list("word", flat=True)
+        field = CharField(label='keywords')
+        field.initial = ",".join(current_keywords)
+
+    def save(self, commit=True, *args, **kwargs):
+        instance = super().save(commit=commit, *args, **kwargs)
+
+        posted_keywords = self.cleaned_data.get('keywords', '').split(',')
+        for keyword in posted_keywords:
+            if keyword != '':
+                obj, _ = submission_models.TransKeyword.objects.language(self.language).get_or_create(
                         word=keyword)
                 instance.keywords.add(obj)
 

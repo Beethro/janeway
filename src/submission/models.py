@@ -16,6 +16,7 @@ from django.conf import settings
 from django.utils import timezone
 from django.utils.translation import ugettext_lazy as _
 from hvad.models import TranslatableModel, TranslatedFields
+from hvad.manager import TranslationManager
 from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 from django.core.exceptions import ObjectDoesNotExist
@@ -246,6 +247,21 @@ STAGE_CHOICES = [
 ]
 
 
+class TransArticleStageLog(models.Model):
+    article = models.ForeignKey('TransArticle')
+    stage_from = models.CharField(max_length=200, blank=False, null=False)
+    stage_to = models.CharField(max_length=200, blank=False, null=False)
+    date_time = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ('-date_time',)
+
+    def __str__(self):
+        return "Article {article_pk} from {stage_from} to {stage_to} at {date_time}".format(article_pk=self.article.pk,
+                                                                                            stage_from=self.stage_from,
+                                                                                            stage_to=self.stage_to,
+                                                                                            date_time=self.date_time)
+
 class ArticleStageLog(models.Model):
     article = models.ForeignKey('Article')
     stage_from = models.CharField(max_length=200, blank=False, null=False)
@@ -281,12 +297,26 @@ class Keyword(models.Model):
     def __str__(self):
         return self.word
 
+class TransKeywordManager(TranslationManager):
+    def get_queryset(self):
+        return super(TranslationManager, self).get_queryset().all()
+
+class TransKeyword(TranslatableModel):
+
+    translations = TranslatedFields(
+        word = models.CharField(max_length=200)
+    )
+
+    objects = TransKeywordManager()
+
+    def __str__(self):
+        return self.word
+
 class KeywordDe(models.Model):
     word = models.CharField(max_length=200)
 
     def __str__(self):
         return self.word
-
 
 class AllArticleManager(models.Manager):
     use_for_related_fields = True
@@ -304,6 +334,795 @@ class PreprintManager(models.Manager):
     def get_queryset(self):
         return super(PreprintManager, self).get_queryset().filter(is_preprint=True)
 
+
+class AllTransArticleManager(TranslationManager):
+    use_for_related_fields = True
+
+    def get_queryset(self):
+        return super(AllTransArticleManager, self).get_queryset().all()
+
+
+class TransArticleManager(TranslationManager):
+    def get_queryset(self):
+        return super(TransArticleManager, self).get_queryset().filter(is_preprint=False)
+
+
+class TransPreprintManager(TranslationManager):
+    def get_queryset(self):
+        return super(TransPreprintManager, self).get_queryset().filter(is_preprint=True)
+
+class TransArticle(TranslatableModel):
+    journal = models.ForeignKey('journal.Journal', blank=True, null=True)
+    # Metadata
+    owner = models.ForeignKey('core.Account', null=True, on_delete=models.SET_NULL)
+    translations = TranslatedFields(
+        title = models.CharField(max_length=300, help_text=_('Your article title')),
+        subtitle = models.CharField(max_length=300, blank=True, null=True,
+                                    help_text=_('Subtitle of the article display format; Title: Subtitle')),
+        abstract = models.TextField(
+        blank=True,
+        null=True,
+        help_text=_('Please avoid pasting content from word processors as they can add '
+                    'unwanted styling to the abstract. You can retype the abstract '
+                    'here or copy and paste it into notepad/a plain text editor before '
+                    'pasting here.')
+        ),
+        non_specialist_summary = models.TextField(blank=True, null=True, help_text='A summary of the article for'
+                                                                       ' non specialists.')
+    )
+    keywords = models.ManyToManyField(Keyword, blank=True, null=True)
+    language = models.CharField(max_length=200, blank=True, null=True, choices=LANGUAGE_CHOICES,
+                                help_text=_('The primary language of the article'))
+
+    section = models.ForeignKey('Section', blank=True, null=True, on_delete=models.SET_NULL)
+    license = models.ForeignKey('Licence', blank=True, null=True, on_delete=models.SET_NULL)
+    publisher_notes = models.ManyToManyField('PublisherNote', blank=True, null=True, related_name='trans_publisher_notes')
+
+    # Remote: a flag that specifies that this article is actually a _link_ to a remote instance
+    # this is useful for overlay journals. The ToC display of an issue uses this flag to link to a DOI rather
+    # than an internal URL
+    is_remote = models.BooleanField(default=False, verbose_name="Remote article",
+                                    help_text="Check if this article is remote")
+    remote_url = models.URLField(blank=True, null=True, help_text="If the article is remote, its URL should be added.")
+
+    # Author
+    authors = models.ManyToManyField('core.Account', blank=True, null=True, related_name='trans_authors')
+    correspondence_author = models.ForeignKey('core.Account', related_name='trans_correspondence_author', blank=True,
+                                              null=True, on_delete=models.SET_NULL)
+
+    competing_interests_bool = models.BooleanField(default=False)
+    competing_interests = models.TextField(blank=True, null=True, help_text="If you have any competing or conflict"
+                                                                            "of insterests in the publication of this "
+                                                                            "article please state them here.")
+
+    # Files
+    manuscript_files = models.ManyToManyField('core.File', null=True, blank=True, related_name='trans_manuscript_files')
+    data_figure_files = models.ManyToManyField('core.File', null=True, blank=True, related_name='trans_data_figure_files')
+    supplementary_files = models.ManyToManyField('core.SupplementaryFile', null=True, blank=True, related_name='trans_supp')
+
+    # Galley
+    render_galley = models.ForeignKey('core.Galley', related_name='trans_render_galley', blank=True, null=True,
+                                      on_delete=models.SET_NULL)
+
+    # Dates
+    date_started = models.DateTimeField(auto_now_add=True)
+
+    date_accepted = models.DateTimeField(blank=True, null=True)
+    date_declined = models.DateTimeField(blank=True, null=True)
+    date_submitted = models.DateTimeField(blank=True, null=True)
+    date_published = models.DateTimeField(blank=True, null=True)
+    date_updated = models.DateTimeField(blank=True, null=True)
+    current_step = models.IntegerField(default=1)
+
+    # Pages
+    page_numbers = models.CharField(max_length=20, blank=True, null=True)
+
+    # Stage
+    stage = models.CharField(max_length=200, blank=False, null=False, default='Unsubmitted', choices=STAGE_CHOICES)
+
+    # Agreements
+    publication_fees = models.BooleanField(default=False)
+    submission_requirements = models.BooleanField(default=False)
+    copyright_notice = models.BooleanField(default=False)
+    comments_editor = models.TextField(blank=True, null=True, verbose_name="Comments to the Editor",
+                                       help_text="Add any comments you'd like the editor to consider here.")
+
+    # an image of recommended size: 750 x 324
+    large_image_file = models.ForeignKey('core.File', null=True, blank=True, related_name='trans_image_file',
+                                         on_delete=models.SET_NULL)
+    exclude_from_slider = models.BooleanField(default=False)
+
+    thumbnail_image_file = models.ForeignKey('core.File', null=True, blank=True, related_name='trans_thumbnail_file',
+                                             on_delete=models.SET_NULL)
+
+    # Whether or not we should display that this article has been "peer reviewed"
+    peer_reviewed = models.BooleanField(default=True)
+
+    # Whether or not this article was imported ie. not processed by this platform
+    is_import = models.BooleanField(default=False)
+
+    metric_stats = None
+
+    # Agreement, this field records the submission checklist that was present when this article was submitted.
+    article_agreement = models.TextField(default='')
+
+    # iThenticate ID
+    ithenticate_id = models.TextField(blank=True, null=True)
+    ithenticate_score = models.IntegerField(blank=True, null=True)
+
+    # Primary issue, allows the Editor to set the Submission's primary Issue
+    primary_issue = models.ForeignKey('journal.Issue', blank=True, null=True, on_delete=models.SET_NULL)
+
+    # Meta
+    meta_image = models.ImageField(blank=True, null=True, upload_to=article_media_upload, storage=fs)
+
+    is_preprint = models.BooleanField(default=False)
+    preprint_decision_notification = models.BooleanField(default=False)
+    preprint_journal_article = models.ForeignKey('submission.Article', blank=True, null=True)
+
+    allarticles = AllTransArticleManager()
+    objects = TransArticleManager()
+    preprints = TransPreprintManager()
+
+    class Meta:
+        ordering = ('-date_published', 'title')
+
+    @property
+    def metrics(self):
+        # only do the metric calculation once per template call
+        if not self.metric_stats:
+            self.metric_stats = ArticleMetrics(self)
+        return self.metric_stats
+
+    @property
+    def has_galley(self):
+        return self.galley_set.all().exists()
+
+    def journal_sections(self):
+        return ((section.id, section.name) for section in self.journal.section_set.all())
+
+    @property
+    def carousel_subtitle(self):
+        carousel_text = ""
+
+        idx = 0
+
+        for author in self.frozenauthor_set.all():
+            if idx > 0:
+                idx = 1
+                carousel_text += ', '
+
+            if author.institution != '':
+                carousel_text += author.full_name() + " ({0})".format(author.institution)
+            else:
+                carousel_text += author.full_name()
+
+            idx = 1
+
+        return carousel_text
+
+    @property
+    def carousel_title(self):
+        return self.title
+
+    @property
+    def carousel_image_resolver(self):
+        return 'article_file_download'
+
+    @property
+    def pdfs(self):
+        ret = self.galley_set.filter(type="pdf")
+        return ret
+
+    @property
+    def get_render_galley(self):
+        if self.render_galley:
+            return self.render_galley
+
+        ret = self.galley_set.filter(file__mime_type="application/xml").order_by(
+            "sequence")
+
+        if len(ret) > 0:
+            return ret[0]
+        else:
+            return None
+
+    @property
+    def xml_galleys(self):
+        ret = self.galley_set.filter(file__mime_type="application/xml").order_by(
+            "sequence")
+
+        return ret
+
+    def all_galley_file_pks(self):
+        """Returns all Galley and related file pks"""
+        file_list = list()
+
+        for galley in self.galley_set.all():
+            file_list.append(galley.file.pk)
+
+            if galley.css_file:
+                file_list.append(galley.css_file.pk)
+
+            for file in galley.images.all():
+                file_list.append(file.pk)
+
+        return file_list
+
+    @property
+    def has_all_supplements(self):
+
+        for xml_file in self.xml_galleys:
+            xml_file_contents = xml_file.get_file(self)
+
+            souped_xml = BeautifulSoup(xml_file_contents, 'lxml')
+
+            elements = {
+                'img': 'src',
+                'graphic': 'xlink:href'
+            }
+
+            from core import models as core_models
+
+            # iterate over all found elements
+            for element, attribute in elements.items():
+                images = souped_xml.findAll(element)
+
+                # iterate over all found elements of each type in the elements dictionary
+                for idx, val in enumerate(images):
+                    # attempt to pull a URL from the specified attribute
+                    url = val.get(attribute, None)
+
+                    if not url:
+                        return False
+
+                    try:
+                        named_files = self.data_figure_files.filter(original_filename=url).first()
+
+                        if not named_files:
+                            return False
+
+                    except core_models.File.DoesNotExist:
+                        return False
+
+        return True
+
+    @property
+    @cache(300)
+    def identifier(self):
+        from identifiers import models as identifier_models
+        try:
+            type_to_fetch = "doi"
+            return identifier_models.Identifier.objects.filter(id_type=type_to_fetch, article=self)[0]
+        except BaseException:
+            new_id = identifier_models.Identifier(id_type="id", identifier=self.id, article=self)
+            return new_id
+
+    def get_identifiers(self):
+        from identifiers import models as identifier_models
+        ids = None
+        try:
+            ids = identifier_models.Identifier.objects.filter(article=self)
+        except:
+            ids = []
+        
+        return ids
+
+    def get_identifier(self, identifier_type, object=False):
+        from identifiers import models as identifier_models
+        try:
+            try:
+                doi = identifier_models.Identifier.objects.get(id_type=identifier_type, article=self)
+            except identifier_models.Identifier.MultipleObjectsReturned:
+                doi = identifier_models.Identifier.objects.filter(id_type=identifier_type, article=self)[0]
+            if not object:
+                return doi.identifier
+            else:
+                return doi
+        except identifier_models.Identifier.DoesNotExist:
+            return None
+
+    def get_doi(self):
+        return self.get_identifier('doi')
+
+    def get_pubid(self):
+        return self.get_identifier('pubid')
+
+    def is_accepted(self):
+        # return true for all stages after accepted
+        return self.stage == "Published" or self.stage == "Accepted" or self.stage == "Editor Copyediting"\
+            or self.stage == "Author Copyediting" or self.stage == "Final Copyediting"\
+            or self.stage == "Typesetting" or self.stage == "Proofing"
+
+    def __str__(self):
+        return u'%s - %s' % (self.pk, self.title)
+
+    @staticmethod
+    @cache(300)
+    def get_article(journal, identifier_type, identifier):
+        from identifiers import models as identifier_models
+        try:
+            article = None
+            # resolve an article from an identifier type and an identifier
+            if identifier_type.lower() == 'id':
+                # this is the hardcoded fallback type: using built-in id
+                article = Article.allarticles.filter(id=identifier, journal=journal)[0]
+            else:
+                # this looks up an article by an ID type and an identifier string
+                article = identifier_models.Identifier.objects.filter(
+                    id_type=identifier_type, identifier=identifier)[0].article
+
+                if article.is_published:
+                    # check that the retrieved article is listed in an issue TOC for the current journal
+                    article_journals = [issue.journal for issue in article.issues.all()]
+
+                    if journal not in article_journals:
+                        return None
+                elif not article.journal == journal:
+                    return None
+
+            return article
+        except BaseException:            # no article found
+            # TODO: handle better and log
+            return None
+
+    @staticmethod
+    def get_press_article(press, identifier_type, identifier):
+        from identifiers import models as identifier_models
+        try:
+            article = None
+            # resolve an article from an identifier type and an identifier
+            if identifier_type.lower() == 'id':
+                # this is the hardcoded fallback type: using built-in id
+                article = Article.allarticles.filter(id=identifier)[0]
+            else:
+                # this looks up an article by an ID type and an identifier string
+                article = identifier_models.Identifier.objects.filter(
+                    id_type=identifier_type, identifier=identifier)[0].article
+
+            return article
+        except BaseException:            # no article found
+            # TODO: handle better and log
+            return None
+
+    @property
+    @cache(600)
+    def url(self):
+        return self.journal.site_url(path=self.local_url)
+
+    @property
+    def local_url(self):
+        from identifiers import models as identifier_models
+        try:
+            identifier = identifier_models.Identifier.objects.get(
+                id_type='pubid',
+                article=self,
+            )
+        except identifier_models.Identifier.DoesNotExist:
+            identifier = identifier_models.Identifier(
+                id_type="id",
+                identifier=self.pk,
+                article=self
+            )
+
+        url = reverse(
+            'article_view',
+            kwargs={'identifier_type': identifier.id_type,
+                    'identifier': identifier.identifier}
+        )
+
+        return url
+
+    @property
+    def pdf_url(self):
+        pdfs = self.pdfs
+        path = reverse('article_download_galley', kwargs={
+            'article_id': self.pk,
+            'galley_id': pdfs[0].pk
+        })
+        return self.journal.site_url(path=path)
+
+    def get_remote_url(self, request):
+        parsed_uri = urlparse('http' + ('', 's')[request.is_secure()] + '://' + request.META['HTTP_HOST'])
+        domain = '{uri.scheme}://{uri.netloc}'.format(uri=parsed_uri)
+        url = domain + self.local_url
+
+        return url
+
+    def step_to_url(self):
+        if self.current_step == 1:
+            return reverse('submit_info', kwargs={'article_id': self.id})
+        elif self.current_step == 2:
+            return reverse('submit_authors', kwargs={'article_id': self.id})
+        elif self.current_step == 3:
+            return reverse('submit_files', kwargs={'article_id': self.id})
+        elif self.current_step == 4:
+            return reverse('submit_review', kwargs={'article_id': self.id})
+        else:
+            return None
+
+    def step_name(self):
+        if self.current_step == 1:
+            return 'Article Information'
+        elif self.current_step == 2:
+            return 'Article Authors'
+        elif self.current_step == 3:
+            return 'Article Files'
+        elif self.current_step == 4:
+            return 'Review Article Submission'
+        elif self.current_step == 5:
+            return 'Submission Complete'
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            current_object = TransArticle.allarticles.get(pk=self.pk)
+            if current_object.stage != self.stage:
+                TransArticleStageLog.objects.create(article=self, stage_from=current_object.stage,
+                                               stage_to=self.stage)
+        super(TransArticle, self).save(*args, **kwargs)
+
+    def folder_path(self):
+        return os.path.join(settings.BASE_DIR, 'files', 'articles', self.pk)
+
+    def production_managers(self):
+        return [assignment.production_manager for assignment in self.productionassignment_set.all()]
+
+    def editor_list(self):
+        return [assignment.editor for assignment in self.editorassignment_set.all()]
+
+    def editors(self):
+        return [{'editor': assignment.editor, 'editor_type': assignment.editor_type, 'assignment': assignment} for
+                assignment in self.editorassignment_set.all()]
+
+    def section_editors(self, emails=False):
+        editors = [assignment.editor for assignment in self.editorassignment_set.filter(editor_type='section-editor')]
+
+        if emails:
+            return set([editor.email for editor in editors])
+
+        else:
+            return editors
+
+    def editor_emails(self):
+        return [assignment.editor.email for assignment in self.editorassignment_set.all()]
+
+    def contact_emails(self):
+        emails = [author.email for author in self.authors.all()]
+        emails.append(self.owner.email)
+        return set(emails)
+
+    def peer_reviewers(self, emails=False):
+        reviewers = [assignment.reviewer for assignment in self.reviewassignment_set.all()]
+
+        if emails:
+            return set([reviewer.email for reviewer in reviewers])
+
+        return set(reviewers)
+
+    def issues_list(self):
+        from journal import models as journal_models
+        return journal_models.Issue.objects.filter(journal=self.journal, articles__in=[self])
+
+    @cache(7200)
+    def altmetrics(self):
+        alm = self.altmetric_set.all()
+        return {
+            'twitter': alm.filter(source='twitter'),
+            'wikipedia': alm.filter(source='wikipedia'),
+            'reddit': alm.filter(source='reddit'),
+            'hypothesis': alm.filter(source='hypothesis'),
+            'wordpress': alm.filter(source='wordpress.com'),
+            'crossref': alm.filter(source='crossref'),
+        }
+
+    @property
+    @cache(300)
+    def issue(self):
+        """
+        Yields the first issue in the current journal that contains this article.
+        :return: an issue object or None
+        """
+        if self.primary_issue:
+            return self.primary_issue
+
+        issues = self.issues_list()
+
+        if issues:
+            issues = issues[0]
+        else:
+            return None
+
+        return issues
+
+    def author_list(self):
+        if self.is_accepted():
+            return ", ".join([author.full_name() for author in self.frozen_authors()])
+        else:
+            return ", ".join([author.full_name() for author in self.authors.all()])
+
+    def can_edit(self, user):
+        # returns True if a user can edit an article
+        # editing is always allowed when a user is staff
+        # otherwise, the user must own the article and it must not have already been published
+
+        if user.is_staff:
+            return True
+        elif user in self.section_editors():
+            return True
+        elif not user.is_anonymous() and user.is_editor(request=None, journal=self.journal):
+            return True
+        else:
+            if self.owner != user:
+                return False
+
+            if self.stage == STAGE_PUBLISHED or self.stage == STAGE_REJECTED:
+                return False
+
+            return True
+
+    def current_review_round(self):
+        try:
+            return self.reviewround_set.all().order_by('-round_number')[0].round_number
+        except IndexError:
+            return 1
+
+    def current_review_round_object(self):
+        try:
+            return self.reviewround_set.all().order_by('-round_number')[0]
+        except IndexError:
+            return None
+
+    @property
+    def active_reviews(self):
+        return self.reviewassignment_set.filter(is_complete=False, date_declined__isnull=True)
+
+    @property
+    def completed_reviews(self):
+        return self.reviewassignment_set.filter(is_complete=True, date_declined__isnull=True)
+
+    @property
+    def completed_reviews_with_decision(self):
+        return self.reviewassignment_set.filter(is_complete=True,
+                                                date_declined__isnull=True,
+                                                review_round=self.current_review_round_object()
+                                                ).exclude(decision='withdrawn')
+
+    def active_review_request_for_user(self, user):
+        try:
+            return self.reviewassignment_set.filter(is_complete=False, date_declined__isnull=True,
+                                                    reviewer=user).first()
+        except review_models.ReviewAssignment.DoesNotExist:
+            return None
+
+    def accept_article(self, stage=None):
+        self.date_accepted = timezone.now()
+        self.date_declined = None
+        if stage:
+            self.stage = stage
+        else:
+            self.stage = STAGE_ACCEPTED
+        self.save()
+
+        if self.journal.use_crossref:
+            id = id_logic.generate_crossref_doi_with_pattern(self)
+            id.register()
+
+    def decline_article(self):
+        self.date_declined = timezone.now()
+        self.date_accepted = None
+        self.stage = STAGE_REJECTED
+        self.save()
+
+    def accept_preprint(self, date, time):
+        self.date_accepted = timezone.now()
+        self.date_declined = None
+        self.stage = STAGE_PREPRINT_PUBLISHED
+        self.date_published = dateparser.parse('{date} {time}'.format(date=date, time=time))
+        self.save()
+
+    def user_is_author(self, user):
+        if user in self.authors.all():
+            return True
+        else:
+            return False
+
+    def has_manuscript_file(self):
+        if self.manuscript_files.all():
+            return True
+        else:
+            return False
+
+    def is_under_revision(self):
+        if self.revisionrequest_set.filter(date_completed__isnull=True):
+            return True
+        else:
+            return False
+
+    def get_next_galley_sequence(self):
+        galley_sequences = [galley.sequence for galley in self.galley_set.all()]
+        return len(galley_sequences) + 1
+
+    @property
+    def is_published(self):
+        if (self.stage == STAGE_PUBLISHED or self.stage == STAGE_PREPRINT_PUBLISHED) and \
+                self.date_published and self.date_published < timezone.now():
+            return True
+        else:
+            return False
+
+    def snapshot_authors(self, article):
+        for author in self.authors.all():
+            author.snapshot_self(article)
+
+    def frozen_authors(self):
+        return FrozenAuthor.objects.filter(article=self)
+
+    def editor_override(self, editor):
+        check = review_models.EditorOverride.objects.filter(article=self, editor=editor)
+
+        if check:
+            return True
+        else:
+            return False
+
+    def active_revision_requests(self):
+        return self.revisionrequest_set.filter(date_completed__isnull=True)
+
+    def active_author_copyedits(self):
+        author_copyedits = []
+
+        for assignment in self.copyeditassignment_set.all():
+            for review in assignment.active_author_reviews():
+                author_copyedits.append(review)
+
+        return author_copyedits
+
+    @property
+    def current_stage_url(self):
+
+        kwargs = {'article_id': self.pk}
+
+        if self.stage == STAGE_UNASSIGNED:
+            return reverse('review_unassigned_article', kwargs=kwargs)
+        elif self.stage in REVIEW_STAGES:
+            return reverse('review_in_review', kwargs=kwargs)
+        elif self.stage in COPYEDITING_STAGES:
+            return reverse('article_copyediting', kwargs=kwargs)
+        elif self.stage == STAGE_TYPESETTING:
+            return reverse('production_article', kwargs=kwargs)
+        elif self.stage == STAGE_PROOFING:
+            return reverse('proofing_article', kwargs=kwargs)
+        elif self.stage == STAGE_READY_FOR_PUBLICATION:
+            return reverse('publish_article', kwargs=kwargs)
+
+    @property
+    def custom_fields(self):
+        """ Returns all the FieldAnswers configured for rendering"""
+        return self.fieldanswer_set.filter(
+            field__display=True,
+            answer__isnull=False,
+        ).values_list('answer', flat=False)
+
+    @property
+    def publisher(self):
+        """ Returns publisher by filtering FieldAnswers"""
+        publisher = self.fieldanswer_set.filter(
+            field__display=True,
+            answer__isnull=False,
+            field__name='publisher'
+        )
+        if len(publisher) > 0:
+            return publisher[0].answer
+
+    @property
+    def edition(self):
+        """ Returns edition by filtering FieldAnswers"""
+        edition = self.fieldanswer_set.filter(
+            field__display=True,
+            answer__isnull=False,
+            field__name='edition'
+        )
+        if len(edition) > 0:
+            return edition[0].answer
+
+    def get_meta_image_path(self):
+        if self.meta_image and self.meta_image.url:
+            return self.meta_image.url
+        elif self.large_image_file and self.large_image_file.id:
+            return reverse('article_file_download', kwargs={'identifier_type': 'id',
+                                                            'identifier': self.pk,
+                                                            'file_id': self.large_image_file.pk})
+        elif self.thumbnail_image_file and self.thumbnail_image_file.id:
+            return reverse('article_file_download', kwargs={'identifier_type': 'id',
+                                                            'identifier': self.pk,
+                                                            'file_id': self.thumbnail_image_file.pk})
+        elif self.journal.default_large_image:
+            return self.journal.default_large_image.url
+        else:
+            return ''
+
+    def unlink_meta_file(self):
+        path = os.path.join(self.meta_image.storage.base_location, self.meta_image.name)
+        if os.path.isfile(path):
+            os.unlink(path)
+
+    def next_author_sort(self):
+        current_orders = [order.order for order in ArticleAuthorOrder.objects.filter(article=self)]
+        if not current_orders:
+            return 0
+        else:
+            return max(current_orders) + 1
+
+    def next_preprint_version(self):
+        versions = [version.version for version in preprint_models.PreprintVersion.objects.filter(preprint=self)]
+        if not versions:
+            return 1
+        else:
+            return max(versions) + 1
+
+    def subject_editors(self):
+        editors = list()
+        subjects = self.subject_set.all().prefetch_related('editors')
+
+        for subject in subjects:
+            for editor in subject.editors.all():
+                editors.append(editor)
+
+        return set(editors)
+
+    def set_preprint_subject(self, subject):
+        for preprint_subject in self.subject_set.all():
+            preprint_subject.preprints.remove(self)
+
+        subject.preprints.add(self)
+
+    def get_subject_area(self):
+        subjects = self.subject_set.all()
+
+        if subjects:
+            return subjects[0]
+        else:
+            return None
+
+    @cache(600)
+    def workflow_stages(self):
+        from core import models as core_models
+        return core_models.TransWorkflowLog.objects.filter(article=self)
+
+    @cache(600)
+    def render_sample_doi(self):
+        return id_logic.render_doi_from_pattern(self)
+
+    def close_core_workflow_objects(self):
+        from review import models as review_models
+        from copyediting import models as copyedit_models
+        from production import models as prod_models
+        from proofing import models as proof_models
+
+        review_models.ReviewAssignment.objects.filter(article=self).update(date_complete=timezone.now(),
+                                                                           is_complete=True)
+
+        copyedit_models.CopyeditAssignment.objects.filter(article=self).update(copyeditor_completed=timezone.now(),
+                                                                               copyedit_acknowledged=True,
+                                                                               copyedit_accepted=timezone.now(),
+                                                                               date_decided=timezone.now(),
+                                                                               decision='cancelled')
+        copyedit_models.AuthorReview.objects.filter(assignment__article=self).update(date_decided=timezone.now())
+
+        prod_models.ProductionAssignment.objects.filter(article=self).update(closed=timezone.now())
+        prod_models.TypesetTask.objects.filter(assignment__article=self).update(completed=timezone.now())
+
+        proof_models.ProofingAssignment.objects.filter(article=self).update(completed=timezone.now())
+        proof_models.ProofingTask.objects.filter(round__assignment__article=self).update(cancelled=True)
+        proof_models.TypesetterProofingTask.objects.filter(proofing_task__round__assignment__article=self).update(
+            cancelled=True
+        )
+
+    def production_assignment_or_none(self):
+        try:
+            return self.productionassignment
+        except ObjectDoesNotExist:
+            return None
 
 class Article(models.Model):
     journal = models.ForeignKey('journal.Journal', blank=True, null=True)
