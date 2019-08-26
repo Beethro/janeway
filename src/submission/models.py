@@ -400,9 +400,9 @@ class TransArticle(TranslatableModel):
     data_figure_files = models.ManyToManyField('core.File', null=True, blank=True, related_name='trans_data_figure_files')
     supplementary_files = models.ManyToManyField('core.SupplementaryFile', null=True, blank=True, related_name='trans_supp')
 
-    # Galley
+    # Galley - Manually delete galley - translatablemodel not supported
     render_galley = models.ForeignKey('core.Galley', related_name='trans_render_galley', blank=True, null=True,
-                                      on_delete=models.SET_NULL)
+                                      on_delete=models.DO_NOTHING)
 
     # Dates
     date_started = models.DateTimeField(auto_now_add=True)
@@ -428,12 +428,10 @@ class TransArticle(TranslatableModel):
                                        help_text="Add any comments you'd like the editor to consider here.")
 
     # an image of recommended size: 750 x 324
-    large_image_file = models.ForeignKey('core.File', null=True, blank=True, related_name='trans_image_file',
-                                         on_delete=models.SET_NULL)
+    large_image_file = models.ForeignKey('core.File', null=True, blank=True, related_name='trans_image_file', on_delete=models.DO_NOTHING)
     exclude_from_slider = models.BooleanField(default=False)
 
-    thumbnail_image_file = models.ForeignKey('core.File', null=True, blank=True, related_name='trans_thumbnail_file',
-                                             on_delete=models.SET_NULL)
+    thumbnail_image_file = models.ForeignKey('core.File', null=True, blank=True, related_name='trans_thumbnail_file', on_delete=models.DO_NOTHING)
 
     # Whether or not we should display that this article has been "peer reviewed"
     peer_reviewed = models.BooleanField(default=True)
@@ -461,7 +459,7 @@ class TransArticle(TranslatableModel):
     preprint_journal_article = models.ForeignKey('submission.Article', blank=True, null=True)
 
     allarticles = AllTransArticleManager()
-    objects = TransArticleManager()
+    #objects = TransArticleManager()
     preprints = TransPreprintManager()
 
     class Meta:

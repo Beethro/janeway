@@ -751,7 +751,7 @@ def edit_galley(request, galley_id, typeset_id=None, article_id=None):
     else:
         typeset_task = None
         article = get_object_or_404(
-            submission_models.Article.allarticles,
+            submission_models.TransArticle.allarticles,
             pk=article_id,
             journal=request.journal
         )
@@ -779,7 +779,6 @@ def edit_galley(request, galley_id, typeset_id=None, article_id=None):
                     )
                 )
             else:
-                print(galley)
                 logic.handle_delete_request(
                     request,
                     galley,

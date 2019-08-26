@@ -824,7 +824,7 @@ def galley_type_choices():
 
 class Galley(models.Model):
     # Local Galley
-    article = models.ForeignKey('submission.Article', null=True)
+    article = models.ForeignKey('submission.TransArticle', null=True)
     file = models.ForeignKey(File)
     css_file = models.ForeignKey(File, related_name='css_file', null=True, blank=True, on_delete=models.SET_NULL)
     images = models.ManyToManyField(File, related_name='images', null=True, blank=True)

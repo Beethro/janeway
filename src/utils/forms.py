@@ -61,6 +61,7 @@ class KeywordModelForm(ModelForm):
             instance.save()
         return instance
 
+
 class TranslatableKeywordModelForm(TranslatableModelForm):
     """ A ModelForm for models implementing a Keyword M2M relationship """
     #keywords = CharField(
@@ -76,6 +77,9 @@ class TranslatableKeywordModelForm(TranslatableModelForm):
         
         if self.keywords:
             self.fields['keywords'].initial = ",".join(self.keywords)
+        else:
+            self.fields['keywords'].initial = ""
+
 
     def save(self, commit=True, *args, **kwargs):
         instance = super().save(commit=commit, *args, **kwargs)
