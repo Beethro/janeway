@@ -24,7 +24,7 @@ class PublisherNoteForm(forms.ModelForm):
 class ArticleStart(forms.ModelForm):
 
     class Meta:
-        model = models.Article
+        model = models.TransArticle
         fields = ('publication_fees', 'submission_requirements', 'copyright_notice', 'comments_editor',
                   'competing_interests')
 
@@ -189,10 +189,10 @@ class TransArticleInfo(TranslatableKeywordModelForm):
         return article
 
 
-class ArticleInfo(KeywordModelForm):
+'''class ArticleInfo(KeywordModelForm):
 
     class Meta:
-        model = models.Article
+        model = models.TransArticle
         fields = ('title', 'title_de', 'subtitle', 'subtitle_de', 'abstract', 'abstract_de', 'non_specialist_summary',
                   'language', 'section', 'license', 'primary_issue',
                   'page_numbers', 'is_remote', 'remote_url', 'peer_reviewed')
@@ -336,7 +336,7 @@ class ArticleInfo(KeywordModelForm):
             article.save()
 
         return article
-
+'''
 
 class AuthorForm(forms.ModelForm):
 

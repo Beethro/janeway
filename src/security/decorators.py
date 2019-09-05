@@ -427,7 +427,7 @@ def article_stage_accepted_or_later_required(func):
         identifier_type = kwargs['identifier_type']
         identifier = kwargs['identifier']
 
-        article_object = models.Article.get_article(request.journal, identifier_type, identifier)
+        article_object = models.TransArticle.get_article(request.journal, identifier_type, identifier)
 
         if article_object is None or not article_object.is_accepted():
             deny_access(request)
@@ -626,9 +626,9 @@ def article_exists(func):
 
     def wrapper(request, *args, **kwargs):
         try:
-            article_object = models.Article.get_article(request.journal, 'id', kwargs['article_id'])
+            article_object = models.TransArticle.get_article(request.journal, 'id', kwargs['article_id'])
         except KeyError:
-            article_object = models.Article.get_article(request.journal,
+            article_object = models.TransArticle.get_article(request.journal,
                                                         kwargs['identifier_type'],
                                                         kwargs['identifier'])
 

@@ -247,23 +247,8 @@ STAGE_CHOICES = [
 ]
 
 
-class TransArticleStageLog(models.Model):
-    article = models.ForeignKey('TransArticle')
-    stage_from = models.CharField(max_length=200, blank=False, null=False)
-    stage_to = models.CharField(max_length=200, blank=False, null=False)
-    date_time = models.DateTimeField(default=timezone.now)
-
-    class Meta:
-        ordering = ('-date_time',)
-
-    def __str__(self):
-        return "Article {article_pk} from {stage_from} to {stage_to} at {date_time}".format(article_pk=self.article.pk,
-                                                                                            stage_from=self.stage_from,
-                                                                                            stage_to=self.stage_to,
-                                                                                            date_time=self.date_time)
-
 class ArticleStageLog(models.Model):
-    article = models.ForeignKey('Article')
+    article = models.ForeignKey('TransArticle')
     stage_from = models.CharField(max_length=200, blank=False, null=False)
     stage_to = models.CharField(max_length=200, blank=False, null=False)
     date_time = models.DateTimeField(default=timezone.now)
@@ -644,7 +629,7 @@ class TransArticle(TranslatableModel):
             # resolve an article from an identifier type and an identifier
             if identifier_type.lower() == 'id':
                 # this is the hardcoded fallback type: using built-in id
-                article = Article.allarticles.filter(id=identifier, journal=journal)[0]
+                article = TransArticle.allarticles.language().fallbacks('en').filter(id=identifier, journal=journal)[0]
             else:
                 # this looks up an article by an ID type and an identifier string
                 article = identifier_models.Identifier.objects.filter(
@@ -755,7 +740,7 @@ class TransArticle(TranslatableModel):
         if self.pk is not None:
             current_object = TransArticle.allarticles.get(pk=self.pk)
             if current_object.stage != self.stage:
-                TransArticleStageLog.objects.create(article=self, stage_from=current_object.stage,
+                ArticleStageLog.objects.create(article=self, stage_from=current_object.stage,
                                                stage_to=self.stage)
         super(TransArticle, self).save(*args, **kwargs)
 
@@ -1903,7 +1888,7 @@ class Article(models.Model):
 
 
 class FrozenAuthor(models.Model):
-    article = models.ForeignKey('submission.Article', blank=True, null=True)
+    article = models.ForeignKey('submission.TransArticle', blank=True, null=True)
     author = models.ForeignKey('core.Account', blank=True, null=True)
 
     first_name = models.CharField(max_length=300, null=True, blank=True)
@@ -2072,7 +2057,7 @@ class Licence(models.Model):
 
 
 class Note(models.Model):
-    article = models.ForeignKey(Article)
+    article = models.ForeignKey(TransArticle)
     creator = models.ForeignKey('core.Account')
     text = models.TextField()
     date_time = models.DateTimeField(auto_now_add=True)
@@ -2132,19 +2117,11 @@ class Field(models.Model):
 
 class FieldAnswer(models.Model):
     field = models.ForeignKey(Field, null=True, blank=True, on_delete=models.SET_NULL)
-    article = models.ForeignKey(Article)
+    article = models.ForeignKey(TransArticle)
     answer = models.TextField()
 
 
 class ArticleAuthorOrder(models.Model):
-    article = models.ForeignKey(Article)
-    author = models.ForeignKey('core.Account')
-    order = models.PositiveIntegerField(default=0)
-
-    class Meta:
-        ordering = ('order',)
-
-class TransArticleAuthorOrder(models.Model):
     article = models.ForeignKey(TransArticle)
     author = models.ForeignKey('core.Account')
     order = models.PositiveIntegerField(default=0)

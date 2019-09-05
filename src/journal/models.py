@@ -389,7 +389,7 @@ class Journal(AbstractSiteModel):
 
 class PinnedArticle(models.Model):
     journal = models.ForeignKey(Journal)
-    article = models.ForeignKey('submission.Article')
+    article = models.ForeignKey('submission.TransArticle')
     sequence = models.PositiveIntegerField(default=0)
 
     class Meta:
@@ -420,7 +420,7 @@ class Issue(models.Model):
     large_image = models.ImageField(upload_to=issue_large_image_path, null=True, blank=True, storage=fs)
 
     # issue articles
-    articles = models.ManyToManyField('submission.Article', blank=True, null=True, related_name='issues')
+    articles = models.ManyToManyField('submission.TransArticle', blank=True, null=True, related_name='issues')
 
     # guest editors
     editors = models.ManyToManyField(
@@ -740,7 +740,7 @@ class SectionOrdering(models.Model):
 
 
 class ArticleOrdering(models.Model):
-    article = models.ForeignKey('submission.Article')
+    article = models.ForeignKey('submission.TransArticle')
     issue = models.ForeignKey(Issue)
     section = models.ForeignKey('submission.Section')
     order = models.PositiveIntegerField(default=1)

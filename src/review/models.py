@@ -15,7 +15,7 @@ assignment_choices = (
 
 
 class EditorAssignment(models.Model):
-    article = models.ForeignKey('submission.Article')
+    article = models.ForeignKey('submission.TransArticle')
     editor = models.ForeignKey('core.Account')
     editor_type = models.CharField(max_length=20, choices=assignment_choices)
     assigned = models.DateTimeField(default=timezone.now)

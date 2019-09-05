@@ -117,7 +117,7 @@ def manager_index(request):
         'journals': journal_models.Journal.objects.all().order_by('sequence'),
         'form': form,
         'modal': modal,
-        'published_articles': submission_models.Article.objects.filter(
+        'published_articles': submission_models.TransArticle.objects.filter(
             stage=submission_models.STAGE_PUBLISHED
         ).select_related('journal')[:50],
         'version': version,

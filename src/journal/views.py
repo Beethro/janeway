@@ -124,7 +124,7 @@ def articles(request):
     pinned_articles = [pin.article for pin in models.PinnedArticle.objects.filter(
         journal=request.journal)]
     pinned_article_pks = [article.pk for article in pinned_articles]
-    article_objects = submission_models.Article.objects.filter(journal=request.journal,
+    article_objects = submission_models.TransArticle.objects.language().fallbacks('en').filter(journal=request.journal,
                                                                date_published__lte=timezone.now(),
                                                                section__pk__in=filters).prefetch_related(
         'frozenauthor_set').order_by(sort).exclude(
@@ -268,7 +268,7 @@ def article(request, identifier_type, identifier):
     :param identifier: the identifier
     :return: a rendered template of the article
     """
-    article_object = submission_models.Article.get_article(request.journal, identifier_type, identifier)
+    article_object = submission_models.TransArticle.get_article(request.journal, identifier_type, identifier)
 
     content = None
     galleys = article_object.galley_set.all()
@@ -312,7 +312,7 @@ def print_article(request, identifier_type, identifier):
     :param identifier: the identifier
     :return: a rendered template of the article
     """
-    article_object = submission_models.Article.get_article(request.journal, identifier_type, identifier)
+    article_object = submission_models.TransArticle.get_article(request.journal, identifier_type, identifier)
 
     content = None
     galleys = article_object.galley_set.all()
@@ -530,7 +530,7 @@ def submit_files_info(request, article_id, file_id):
     :param file_id: the file ID for which to submit information
     :return: a rendered template to submit file information
     """
-    article_object = get_object_or_404(submission_models.Article.allarticlesd, pk=article_id)
+    article_object = submission_models.TransArticle.objects.language().fallbacks('en').filter(pk=article_id).first()
     file_object = get_object_or_404(core_models.File, pk=file_id)
 
     form = review_forms.ReplacementFileDetails(instance=file_object)
@@ -732,11 +732,10 @@ def publish_article(request, article_id):
     :param article_id: Article PK
     :return: contextualised django template
     """
-    article = get_object_or_404(submission_models.Article,
+    article = submission_models.TransArticle.objects.language().fallbacks('en').filter(
                                 Q(stage=submission_models.STAGE_READY_FOR_PUBLICATION) |
-                                Q(stage=submission_models.STAGE_PUBLISHED),
-                                pk=article_id,
-                                journal=request.journal)
+                                Q(stage=submission_models.STAGE_PUBLISHED), pk=article_id).first()
+
     models.FixedPubCheckItems.objects.get_or_create(article=article)
 
     doi_data, doi = logic.get_doi_data(article)
@@ -896,7 +895,7 @@ def manage_issues(request, issue_id=None, event=None):
             modal = 'deleteme'
         if event == 'remove':
             article_id = request.GET.get('article')
-            article = get_object_or_404(submission_models.Article, pk=article_id, pk__in=issue.article_pks)
+            article = models.TransArticle.objects.language().fallbacks('en').filter(pk=article_id, pk__in=issue.article_pks).first()
             issue.articles.remove(article)
             return redirect(reverse('manage_issues_id', kwargs={'issue_id': issue.pk}))
 
@@ -1268,13 +1267,13 @@ def manage_archive(request):
     :param request: request object
     :return: contextualised django template
     """
-    published_articles = submission_models.Article.objects.filter(
+    published_articles = submission_models.TransArticle.objects.language().fallbacks('en').filter(
         journal=request.journal,
         stage=submission_models.STAGE_PUBLISHED
     ).order_by(
         '-date_published'
     )
-    rejected_articles = submission_models.Article.objects.filter(
+    rejected_articles = submission_models.TransArticle.objects.language().fallbacks('en').filter(
         journal=request.journal,
         stage=submission_models.STAGE_REJECTED
     ).order_by(
@@ -1302,7 +1301,7 @@ def manage_archive_article(request, article_id):
     from identifiers import models as identifier_models
     from submission import forms as submission_forms
 
-    article = get_object_or_404(submission_models.Article, pk=article_id)
+    article = submission_models.TransArticle.objects.language().fallbacks('en').filter(pk=article_id).first()
     galleys = production_logic.get_all_galleys(article)
     identifiers = identifier_models.Identifier.objects.filter(article=article)
 

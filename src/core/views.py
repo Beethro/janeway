@@ -582,7 +582,7 @@ def manager_index(request):
 
     template = 'core/manager/index.html'
     context = {
-        'published_articles': submission_models.Article.objects.filter(
+        'published_articles': submission_models.TransArticle.objects.language('all').filter(
             stage=submission_models.STAGE_PUBLISHED, journal=request.journal).select_related('section')[:25]
     }
 

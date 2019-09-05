@@ -52,7 +52,7 @@ class Identifier(models.Model):
     id_type = models.CharField(max_length=300, choices=identifier_choices)
     identifier = models.CharField(max_length=300)
     enabled = models.BooleanField(default=True)
-    article = models.ForeignKey(submission_models.Article, on_delete=models.CASCADE)
+    article = models.ForeignKey(submission_models.TransArticle, on_delete=models.CASCADE)
 
     def __str__(self):
         return u'[{0}]: {1}'.format(self.id_type.upper(), self.identifier)
