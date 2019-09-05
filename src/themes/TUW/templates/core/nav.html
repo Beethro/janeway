@@ -5,17 +5,37 @@
 {% load hooks %}
 
 <nav class="navbar navbar-toggleable-sm navbar-light bg-light align-items-start">
-    <a class="navbar-brand" href="{% url 'website_index' %}">
-        {% if request.journal %}
-            {% if request.journal.header_image %}
-                <img src="{{ request.journal.header_image.url }}" class="img-fluid">
+    <div style="display: flex; flex-direction: row; width: 100%;">
+        <a class="navbar-brand" style="flex: 1 1 auto;" href="{% url 'website_index' %}">
+            {% if request.journal %}
+                {% if request.journal.header_image %}
+                    <img src="{{ request.journal.header_image.url }}" class="img-fluid">
+                {% else %}
+                <img src="{% static "TUW/img/header.png" %}">
+                {% endif %}
             {% else %}
-            <img src="{% static "TUW/img/header.png" %}">
+                <a href="/">{% svg request.press_cover %}</a>
             {% endif %}
-        {% else %}
-            <a href="/">{% svg request.press_cover %}</a>
+        </a>
+        <div style="padding: 5px;">
+        {% if journal_settings.general.switch_language %}
+            <form action="{% url 'set_language' %}" method="post">{% csrf_token %}
+                <input name="next" type="hidden" value="{{ request.PATH }}"/>
+                <select name="language" onchange="this.form.submit()">
+                    {% get_current_language as LANGUAGE_CODE %}
+                    {% get_available_languages as LANGUAGES %}
+                    {% get_language_info_list for LANGUAGES as languages %}
+                    {% for language in languages %}
+                        <option value="{{ language.code }}"{% if language.code == LANGUAGE_CODE %}
+                                selected{% endif %}>
+                            {{ language.name_local }} ({{ language.code }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </form>
         {% endif %}
-    </a>
+        </div>
+    </div>
     <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
