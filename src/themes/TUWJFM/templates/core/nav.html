@@ -104,12 +104,43 @@
                 </a></li>
                 {% endif %}
 
+<<<<<<< HEAD
 <!--                <li class="nav-item"><a href="{% url 'mission_statement' %}" class="nav-link">Mission Statement</a></li>
                 <li class="nav-item"><a href="{% url 'scientific_committee' %}" class="nav-link">Scientific Committee</a></li>
                 <li class="nav-item"><a href="{% url 'call_for_papers' %}" class="nav-link">Call For Papers</a></li>
                 <li class="nav-item"><a href="{% url 'imprint' %}" class="nav-link">Imprint</a></li>
                 <li class="nav-item"><a href="{% url 'ethics' %}" class="nav-link">Publication Ethics and Publication Malpractice Statement</a></li>
 -->
+=======
+                {% for item in navigation_items %}
+                {% if item.has_sub_nav %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="" id="{{ item.link_name|slugify }}"
+                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            {{ item.link_name }}
+                        </a>
+                        <div class="dropdown-menu" aria-labelledby="{{ item.link_name|slugify }}">
+                            {% tag_get_sub_nav_items item LANGUAGE_CODE as sub_nav_items %}
+                            {% for subnav in sub_nav_items %}
+                            <a href="{{ subnav.url }}" class="dropdown-item">{{ subnav.link_name }}</a>
+                            {% endfor %}
+                            {% if request.journal.code == "OES" or request.journal.code == "OEST" %}
+                            {% if LANGUAGE_CODE == "de" and item.link_name == "Über die Zeitschrift" %}
+                                <a href="{% url 'newsletter' %}" class="dropdown-item">{% trans "Newsletter" %}</a>
+                            {% elif LANGUAGE_CODE == "en" and item.link_name == "About" %}
+                                <a href="{% url 'newsletter' %}" class="dropdown-item">{% trans "Newsletter" %}</a>
+                            {% else %}
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </li>
+                {% else %}
+                    <li class="nav-item"><a href="{{ item.url }}" class="nav-link">{{ item.link_name }}</a></li>
+                {% endif %}
+                {% endfor %}
+
+                {% if not navigation_items %}
+>>>>>>> parent of c160db66... fix label
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="" id="About"
                     data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"">{% trans "About" %}</a>
